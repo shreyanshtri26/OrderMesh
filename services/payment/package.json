@@ -1,0 +1,14 @@
+{
+  "name": "@ordermesh/payment",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --import @opentelemetry/auto-instrumentations-node/register --watch src/index.ts",
+    "start": "node --import @opentelemetry/auto-instrumentations-node/register src/index.ts",
+    "migrate": "node --env-file-if-exists=../../.env src/migrate.ts"
+  },
+  "dependencies": {
+    "@ordermesh/shared": "workspace:*"
+  }
+}

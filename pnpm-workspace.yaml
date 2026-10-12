@@ -1,0 +1,12 @@
+packages:
+  - "packages/*"
+  - "services/*"
+  - "apps/*"
+onlyBuiltDependencies:
+  - "@confluentinc/kafka-javascript"
+  - "@embedded-postgres/linux-x64"
+  - "@embedded-postgres/darwin-arm64"
+  - "@embedded-postgres/darwin-x64"
+  - "@embedded-postgres/windows-x64"
+  - embedded-postgres
+  - esbuild
