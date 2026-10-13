@@ -11,7 +11,11 @@ export type Tx = pg.PoolClient;
 
 export function createPool(connectionString: string): Pool {
   const ssl = /sslmode=require/.test(connectionString) ? { rejectUnauthorized: false } : undefined;
-  return new pg.Pool({ connectionString, ssl, max: 5, idleTimeoutMillis: 10_000 });
+  // Idle connections stay open for 60 s. Opening one to a remote database costs a TCP + TLS +
+  // auth handshake (0.1 s to several seconds to Neon), and orders arrive in bursts with quiet
+  // gaps. At 10 s the first order after a pause paid that again; 60 s halved the median
+  // POST-to-terminal time for orders 15 s apart (SKILL.md, verification log).
+  return new pg.Pool({ connectionString, ssl, max: 5, idleTimeoutMillis: 60_000 });
 }
 
 /** Runs `fn` inside BEGIN/COMMIT, rolling back on any error. */

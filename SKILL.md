@@ -96,6 +96,37 @@ Fill these in only with numbers you measured yourself.
    Fix:
    Lesson:
 
+# Verification log (Weeks 2 and 3)
+
+Run on the local Docker stack, `docker compose --profile app up --build`:
+
+- **Two concurrent orders for the last saffron (stock 1):** one `CANCELLED` with `out_of_stock:SKU-SAFFRON-1G`, one `CONFIRMED`. Final stock: `available 0, reserved 1`. Also covered by `services/inventory/test/reservation.int.test.ts`, which runs the two reservations in parallel against Postgres.
+- **`PAYMENT_FAILURE_RATE=1`, three orders of 2 kg rice:** all three `CANCELLED` with `card_declined`. Stock before and after: `20 / 0`. The history for one order reads `INVENTORY_RESERVED → CANCELLING (PaymentFailed) → CANCELLED (InventoryReleased)`.
+- **Default failure rate (0.2), six orders:** 3 `CONFIRMED`, 3 `CANCELLED` (declined at random).
+
+## Deployment-shape benchmark
+
+The real image, all four services in one container (`SERVICE=all`, as on Render's free tier), capped at 512 MB, against Neon in `aws-ap-southeast-1`, with Kafka local, driven from a Windows laptop in India. Measured, not estimated; n is small and the network was noisy, so read these as orders of magnitude.
+
+| What                                           | Result                                                                                                                                         |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Memory, idle (4 services + runner)             | 297 MiB of 512 (about 123 MB per service)                                                                                                      |
+| Memory, peak under a 20-order burst            | 297 MiB; no OOM kill, no restarts                                                                                                              |
+| Cold start to all four services connected      | 4 CPUs 9.6 s (n=1) · 2 CPUs 20.4 s (n=1) · 0.5 CPU 16-24 s (n=4) · **0.1 CPU 69-72 s (n=2)**; first-ever runs on cold disk caches took 60-90 s |
+| Per-query round trip to Neon (open connection) | about 80 ms                                                                                                                                    |
+| Opening a new connection to Neon (TCP + TLS)   | 0.1 s to 4.9 s, highly variable                                                                                                                |
+| POST to terminal status, 0.1 CPU, sequential   | p50 22 s, p95 37 s                                                                                                                             |
+| POST to terminal status, 0.1 CPU, burst of 20  | p50 158 s, p95 182 s                                                                                                                           |
+| POST `/orders` latency, 0.1 CPU                | sequential p50 0.8 s; burst p50 4.8 s                                                                                                          |
+
+What this says:
+
+- **Memory is not the problem.** Four Node processes fit with room to spare.
+- **CPU and network distance are.** At 0.1 CPU the container is starved, and every saga hop makes several round trips to a database about 80 ms away. A burst of 20 orders took minutes to settle. The saga is correct under this load (no lost or duplicated orders), just slow.
+- **Disabling the OpenTelemetry SDK (`OTEL_SDK_DISABLED=true`) showed no reliable gain** at 0.1 CPU, so it is not set.
+- **The pool idle timeout mattered.** Orders 15 s apart at 0.5 CPU, four per arm, two rounds with the order swapped: median POST-to-terminal 76 s and 32 s with a 10 s idle timeout, 30 s and 17 s with 60 s. The timeout is now 60 s. Small n, so the factor is approximate; the direction held in both orderings.
+- **Caveats.** `docker --cpus 0.1` is a hard quota; Render's free tier is a burstable share, so real behaviour may differ. Running the services in the same region as Neon should remove most of the network cost. The k6 script exists but was not used for these numbers.
+
 # 8. What I would do differently at 100x scale
 
 -

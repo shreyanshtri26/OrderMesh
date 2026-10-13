@@ -45,22 +45,23 @@ OrderMesh splits an order pipeline into Order, Inventory, Payment and Notificati
 
 ✅ built and tested in the foundation · 🧑‍💻 yours to build next (spec in the code) · 🚧 on the [roadmap](#roadmap)
 
-| Feature                                                                            | Status                                                 |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Shared event contract with zod validation, 4 domain topics                         | ✅                                                     |
-| Transactional outbox + relay with `FOR UPDATE SKIP LOCKED`                         | ✅ integration-tested                                  |
-| Idempotent consumer, 3 retries with exponential backoff, DLQ with error headers    | ✅ integration-tested                                  |
-| Order API: create (202 + `Idempotency-Key`), get with history, list                | ✅                                                     |
-| Saga orchestrator: state machine, compensation, late events ignored                | ✅ unit- and integration-tested                        |
-| Notification service                                                               | ✅                                                     |
-| Order API keeps accepting orders while Kafka is down                               | ✅ verified                                            |
-| OpenTelemetry: HTTP + Postgres auto-instrumented, Kafka context propagated by hand | ✅                                                     |
-| Docker Compose (Kafka 4.1 KRaft, Postgres, Jaeger), single multi-service image     | ✅ config validated; first full run is part of Week 1  |
-| Inventory: reserve stock with row locks; release on compensation                   | 🧑‍💻 Week 2 ([spec](services/inventory/src/handlers.ts)) |
-| Payment: charge through the mock gateway, record the result                        | 🧑‍💻 Week 3 ([spec](services/payment/src/handlers.ts))   |
-| DLQ inspect-and-replay endpoint                                                    | 🚧 Week 4                                              |
-| Kubernetes manifests (probes, resources), tested with kind                         | 🚧 Week 4                                              |
-| Demo page on Vercel, k6 load test, deployment                                      | 🚧 Week 5                                              |
+| Feature                                                                            | Status                                                                                           |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Shared event contract with zod validation, 4 domain topics                         | ✅                                                                                               |
+| Transactional outbox + relay with `FOR UPDATE SKIP LOCKED`                         | ✅ integration-tested                                                                            |
+| Idempotent consumer, 3 retries with exponential backoff, DLQ with error headers    | ✅ integration-tested                                                                            |
+| Order API: create (202 + `Idempotency-Key`), get with history, list                | ✅                                                                                               |
+| Saga orchestrator: state machine, compensation, late events ignored                | ✅ unit- and integration-tested                                                                  |
+| Notification service                                                               | ✅                                                                                               |
+| Order API keeps accepting orders while Kafka is down                               | ✅ verified                                                                                      |
+| OpenTelemetry: HTTP + Postgres auto-instrumented, Kafka context propagated by hand | ✅                                                                                               |
+| Docker Compose (Kafka 4.1 KRaft, Postgres, Jaeger), single multi-service image     | ✅ config validated; first full run is part of Week 1                                            |
+| Inventory: reserve stock with row locks; release on compensation                   | ✅ integration-tested; live-verified ([code](services/inventory/src/handlers.ts))                |
+| Payment: charge through the mock gateway, record the result                        | ✅ idempotent charge (order id as key); live-verified ([code](services/payment/src/handlers.ts)) |
+| DLQ inspect-and-replay endpoint (`/admin/dlq`, token-protected)                    | ✅ live-verified                                                                                 |
+| Kubernetes manifests (probes, resources) in [`k8s/`](k8s)                          | ✅ written and structure-checked; 🚧 not yet run on kind                                         |
+| Storefront page (Vercel, with labelled sample-data mode) and k6 load test script   | ✅ page live; 🚧 k6 numbers not yet measured                                                     |
+| Hosted deployment (Aiven + Neon + Render)                                          | 🚧 prepared: `render.yaml`, `scripts/deploy-site.mjs`; needs your Aiven and Render accounts      |
 
 ## Architecture
 
@@ -139,6 +140,7 @@ packages/shared/src/
   events.ts        Event envelope, payload schemas, topic map
   outbox.ts        appendToOutbox() and the relay
   consumer.ts      Idempotent consumer, retries, DLQ
+  dlq.ts           Read and replay dead-letter entries
   db.ts            Pool, transactions, migration runner (+ outbox/processed_events tables)
   kafka.ts         Kafka client, idempotent producer
   tracing.ts       Trace context across Kafka
@@ -147,12 +149,14 @@ packages/shared/src/
   catalog.ts       Demo products and prices
 services/
   order/           Public API + saga orchestrator   (port 3001)
-  inventory/       Stock reservation                (port 3002)  ← your Week 2
-  payment/         Mock gateway + charging          (port 3003)  ← your Week 3
+  inventory/       Stock reservation                (port 3002)
+  payment/         Mock gateway + charging          (port 3003)
   notification/    Customer notifications           (port 3004)
   */migrations/    SQL owned by that service only
   */test/          Unit (*.test.ts) and integration (*.int.test.ts) tests
 scripts/start-all.ts   Runs all four services in one container (Render free tier)
+scripts/k6/            Load test for the Order API
+k8s/                   Kubernetes manifests (infra.yaml, services.yaml)
 infra/postgres/        Local database init
 docker-compose.yml     Kafka, Postgres, Jaeger (+ services with --profile app)
 Dockerfile             One image; SERVICE=order|inventory|payment|notification|all
@@ -185,27 +189,61 @@ curl -s localhost:3001/orders/<id>     # status + history
 
 Open Jaeger at <http://localhost:16686> to see the trace across services.
 
-> Until you implement the Inventory and Payment handlers (Weeks 2 and 3), orders stay `PENDING` and those services log `TODO`. That is expected: the pipeline, outbox and consumers are already working underneath.
+> Orders run the full saga: stock is reserved, the payment is charged, and the order ends `CONFIRMED`, or `CANCELLED` with its stock released when the card is declined.
 
 **Run everything in containers instead:** `docker compose --profile app up --build`.
+
+**Use Neon instead of the local Postgres:** put each service's Neon connection string in `.env` (`ORDER_DATABASE_URL`, `INVENTORY_DATABASE_URL`, `PAYMENT_DATABASE_URL`, `NOTIFICATION_DATABASE_URL`; one database per service, see `.env.example`), then:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.neon.yml --profile app up --build -d
+```
+
+The services run their migrations against Neon on start. Expect a slower saga than locally (several seconds, not one or two) when the services run far from the database: every hop makes database round trips, and the first request after Neon scales to zero includes a cold start. Running the services in the same region as the Neon project removes most of that.
+
+> On Windows, Postgres is published on host port `15432` (Windows often reserves 5430-5529). Containers still reach it as `postgres:5432`.
+
+**Inspect and replay dead letters** (the token defaults to `dev-admin-token` in compose; the routes are off when `ADMIN_TOKEN` is unset):
+
+```bash
+curl -H "Authorization: Bearer dev-admin-token" http://localhost:3001/admin/dlq
+curl -X POST -H "Authorization: Bearer dev-admin-token" -H "Content-Type: application/json"   -d '{"partition":0,"offset":0}' http://localhost:3001/admin/dlq/replay
+```
+
+Replay is safe because consumers are idempotent. A message that can never succeed (bad JSON) lands in the DLQ again.
+
+**Kubernetes (kind):**
+
+```bash
+docker build -t ordermesh:latest .
+kind create cluster && kind load docker-image ordermesh:latest
+kubectl create namespace ordermesh
+kubectl -n ordermesh create configmap postgres-init --from-file=infra/postgres/init.sql
+kubectl apply -f k8s/infra.yaml && kubectl apply -f k8s/services.yaml
+kubectl -n ordermesh port-forward svc/order 3001:3001
+```
+
+**Load test** (k6, or the Docker form in the script header): `k6 run scripts/k6/order-load.js`.
 
 **Try the guarantees yourself:**
 
 - Stop Kafka (`docker compose stop kafka`), place orders (still `202`), start it again and watch the outbox drain.
 - Send the same `POST` twice with one `Idempotency-Key`: the second returns `200` with the same order.
-- Set `PAYMENT_FAILURE_RATE=1` (after Week 3) and watch every order compensate to `CANCELLED`.
+- Set `PAYMENT_FAILURE_RATE=1` and watch every order compensate to `CANCELLED` with its stock restored.
 
 ## API
 
-| Method | Path                  | Description                                                                           |
-| ------ | --------------------- | ------------------------------------------------------------------------------------- |
-| `POST` | `/orders`             | Create an order. `202` with the order (`PENDING`). Optional `Idempotency-Key` header. |
-| `GET`  | `/orders/:id`         | Order with status, cancel reason and saga history                                     |
-| `GET`  | `/orders`             | 20 most recent orders                                                                 |
-| `GET`  | `/catalog`            | Demo products and prices (paise)                                                      |
-| `GET`  | `:3002/stock`         | Current stock levels                                                                  |
-| `GET`  | `:3004/notifications` | Recent customer notifications                                                         |
-| `GET`  | `/health`, `/ready`   | Liveness; readiness (database) on every service                                       |
+| Method | Path                  | Description                                                                             |
+| ------ | --------------------- | --------------------------------------------------------------------------------------- |
+| `POST` | `/orders`             | Create an order. `202` with the order (`PENDING`). Optional `Idempotency-Key` header.   |
+| `GET`  | `/orders/:id`         | Order with status, cancel reason and saga history                                       |
+| `GET`  | `/orders`             | 20 most recent orders                                                                   |
+| `GET`  | `/catalog`            | Demo products and prices (paise)                                                        |
+| `GET`  | `:3002/stock`         | Current stock levels                                                                    |
+| `GET`  | `:3004/notifications` | Recent customer notifications                                                           |
+| `GET`  | `/health`, `/ready`   | Liveness; readiness (database) on every service                                         |
+| `GET`  | `/admin/dlq`          | Dead-letter entries with origin, consumer, attempts and error. Needs `ADMIN_TOKEN`.     |
+| `POST` | `/admin/dlq/replay`   | Body `{partition, offset}`: republish one entry to its original topic. Needs the token. |
 
 ## Testing
 
@@ -223,11 +261,26 @@ Integration tests start an **embedded Postgres** from npm, so they need no Docke
 | Piece     | Where                                  | Notes                                                                                                     |
 | --------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Kafka     | Aiven free tier                        | 5 topics × 2 partitions, ~125 KiB/s each way; powers off after long inactivity (restart from the console) |
-| Databases | Neon, one free project per service     | Scale to zero when idle                                                                                   |
+| Databases | Neon, one database per service         | Scale to zero when idle                                                                                   |
 | Services  | Render free web service, `SERVICE=all` | All four run in one container (`scripts/start-all.ts`); sleeps after 15 min idle, ~1 min to wake          |
-| Demo page | Vercel                                 | Calls the Order API from server-side routes                                                               |
+| Demo page | Vercel                                 | Proxies `/catalog` and `/orders` to the Order API with rewrites; sample-data mode when it is unreachable  |
 
 Running four services in one container is a deployment compromise for the free tier, not an architecture change: each service is still its own process, with its own database and consumer group. Locally and in Kubernetes they run separately.
+
+**Go live (about 20 minutes, no card needed):**
+
+1. **Kafka (Aiven).** Create a free Kafka service. Create four topics with 2 partitions each: `orders`, `inventory`, `payments`, `dlq`. Note the service URI (host:port), the `avnadmin` password and the CA certificate.
+2. **Databases (Neon).** Already covered above: one database per service, pooled connection strings.
+3. **Services (Render).** Push this repo to GitHub, then New > Blueprint and pick it. Render reads [`render.yaml`](render.yaml) and asks for the values it marks as secret: the Kafka URI, SASL username and password, CA certificate (paste with real line breaks), and the four database URLs.
+4. **Demo page (Vercel).** Point the page at the Render URL:
+
+   ```bash
+   API_URL=https://<your-service>.onrender.com node scripts/deploy-site.mjs
+   ```
+
+   Only `/catalog`, `/orders` and `/orders/:id` are forwarded, so `/admin/dlq` is never reachable through the site.
+
+Measured locally with the real image at Render's limits (details in `SKILL.md`): four services fit in **297 MiB of 512**, and cold start takes about **70 s at 0.1 CPU** (15-25 s at 0.5 CPU). The saga is also slow there (tens of seconds per order, minutes for a burst) because of the CPU share and database distance. Not exercised: the Render and Aiven steps themselves.
 
 ## Roadmap
 
