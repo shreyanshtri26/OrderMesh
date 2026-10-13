@@ -1,0 +1,20 @@
+# Runs the services against Neon instead of the local Postgres container.
+# The four *_DATABASE_URL values come from .env (see .env.example).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.neon.yml --profile app up --build -d
+#
+# Kafka and Jaeger still run locally. The local postgres container is started
+# only because the base file lists it as a dependency; the services ignore it.
+services:
+  order:
+    environment:
+      ORDER_DATABASE_URL: "${ORDER_DATABASE_URL:?set ORDER_DATABASE_URL in .env}"
+  inventory:
+    environment:
+      INVENTORY_DATABASE_URL: "${INVENTORY_DATABASE_URL:?set INVENTORY_DATABASE_URL in .env}"
+  payment:
+    environment:
+      PAYMENT_DATABASE_URL: "${PAYMENT_DATABASE_URL:?set PAYMENT_DATABASE_URL in .env}"
+  notification:
+    environment:
+      NOTIFICATION_DATABASE_URL: "${NOTIFICATION_DATABASE_URL:?set NOTIFICATION_DATABASE_URL in .env}"

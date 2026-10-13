@@ -29,7 +29,8 @@ services:
     environment:
       POSTGRES_USER: ordermesh
       POSTGRES_PASSWORD: ordermesh
-    ports: ["5432:5432"]
+    # Host port 15432: Windows reserves 5430-5529 on many machines. Services use postgres:5432 inside the network.
+    ports: ["15432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -89,6 +90,8 @@ services:
       SERVICE: order
       OTEL_SERVICE_NAME: order
       ORDER_DATABASE_URL: postgresql://ordermesh:ordermesh@postgres:5432/orders
+      # Enables /admin/dlq and /admin/dlq/replay. Local default only: set your own for anything shared.
+      ADMIN_TOKEN: "${ADMIN_TOKEN:-dev-admin-token}"
     ports: ["3001:3001"]
 
   inventory:
@@ -107,7 +110,7 @@ services:
       SERVICE: payment
       OTEL_SERVICE_NAME: payment
       PAYMENT_DATABASE_URL: postgresql://ordermesh:ordermesh@postgres:5432/payments
-      PAYMENT_FAILURE_RATE: "0.2"
+      PAYMENT_FAILURE_RATE: "${PAYMENT_FAILURE_RATE:-0.2}"
     ports: ["3003:3003"]
 
   notification:

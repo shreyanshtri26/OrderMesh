@@ -1,0 +1,257 @@
+# OrderMesh on Kubernetes, part 2 of 2: the four services.
+# Apply after infra.yaml. All four run the same image; SERVICE picks which one.
+#
+#   docker build -t ordermesh:latest .
+#   kind load docker-image ordermesh:latest        # kind only
+#   kubectl apply -f k8s/infra.yaml && kubectl apply -f k8s/services.yaml
+#
+# Probes: /health (liveness: the process is up) and /ready (readiness: the
+# database answers). Kafka status is reported but never fails readiness, because
+# the outbox absorbs a Kafka outage. Each service retries its database and Kafka
+# connections forever, so no init containers are needed to order startup.
+#
+# To scale the Order API, raise `replicas` on `order`: the saga consumer joins
+# the same consumer group and the outbox relay uses FOR UPDATE SKIP LOCKED.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order
+  namespace: ordermesh
+spec:
+  selector: { app: order }
+  ports:
+    - { name: http, port: 3001, targetPort: 3001 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order
+  namespace: ordermesh
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: order }
+  template:
+    metadata:
+      labels: { app: order }
+    spec:
+      containers:
+        - name: order
+          image: ordermesh:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3001
+          env:
+            - { name: SERVICE, value: order }
+            - { name: NODE_ENV, value: production }
+            - { name: KAFKA_BROKERS, value: "kafka:19092" }
+            - { name: OTEL_SERVICE_NAME, value: order }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger:4318" }
+            - { name: OTEL_TRACES_EXPORTER, value: otlp }
+            - { name: OTEL_METRICS_EXPORTER, value: none }
+            - { name: OTEL_LOGS_EXPORTER, value: none }
+            - { name: OTEL_NODE_RESOURCE_DETECTORS, value: none }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: ordermesh-secrets, key: POSTGRES_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: ordermesh-secrets, key: POSTGRES_PASSWORD } }
+            # $(VAR) is expanded by Kubernetes from the variables defined above it.
+            - name: ORDER_DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/orders"
+            - name: ADMIN_TOKEN
+              valueFrom: { secretKeyRef: { name: ordermesh-secrets, key: ADMIN_TOKEN } }
+          livenessProbe:
+            httpGet: { path: /health, port: 3001 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /ready, port: 3001 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { cpu: 500m, memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory
+  namespace: ordermesh
+spec:
+  selector: { app: inventory }
+  ports:
+    - { name: http, port: 3002, targetPort: 3002 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  namespace: ordermesh
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: inventory }
+  template:
+    metadata:
+      labels: { app: inventory }
+    spec:
+      containers:
+        - name: inventory
+          image: ordermesh:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3002
+          env:
+            - { name: SERVICE, value: inventory }
+            - { name: NODE_ENV, value: production }
+            - { name: KAFKA_BROKERS, value: "kafka:19092" }
+            - { name: OTEL_SERVICE_NAME, value: inventory }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger:4318" }
+            - { name: OTEL_TRACES_EXPORTER, value: otlp }
+            - { name: OTEL_METRICS_EXPORTER, value: none }
+            - { name: OTEL_LOGS_EXPORTER, value: none }
+            - { name: OTEL_NODE_RESOURCE_DETECTORS, value: none }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: ordermesh-secrets, key: POSTGRES_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: ordermesh-secrets, key: POSTGRES_PASSWORD } }
+            # $(VAR) is expanded by Kubernetes from the variables defined above it.
+            - name: INVENTORY_DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/inventory"
+          livenessProbe:
+            httpGet: { path: /health, port: 3002 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /ready, port: 3002 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { cpu: 500m, memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment
+  namespace: ordermesh
+spec:
+  selector: { app: payment }
+  ports:
+    - { name: http, port: 3003, targetPort: 3003 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment
+  namespace: ordermesh
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: payment }
+  template:
+    metadata:
+      labels: { app: payment }
+    spec:
+      containers:
+        - name: payment
+          image: ordermesh:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3003
+          env:
+            - { name: SERVICE, value: payment }
+            - { name: NODE_ENV, value: production }
+            - { name: KAFKA_BROKERS, value: "kafka:19092" }
+            - { name: OTEL_SERVICE_NAME, value: payment }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger:4318" }
+            - { name: OTEL_TRACES_EXPORTER, value: otlp }
+            - { name: OTEL_METRICS_EXPORTER, value: none }
+            - { name: OTEL_LOGS_EXPORTER, value: none }
+            - { name: OTEL_NODE_RESOURCE_DETECTORS, value: none }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: ordermesh-secrets, key: POSTGRES_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: ordermesh-secrets, key: POSTGRES_PASSWORD } }
+            # $(VAR) is expanded by Kubernetes from the variables defined above it.
+            - name: PAYMENT_DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/payments"
+            - { name: PAYMENT_FAILURE_RATE, value: "0.2" }
+          livenessProbe:
+            httpGet: { path: /health, port: 3003 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /ready, port: 3003 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { cpu: 500m, memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification
+  namespace: ordermesh
+spec:
+  selector: { app: notification }
+  ports:
+    - { name: http, port: 3004, targetPort: 3004 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification
+  namespace: ordermesh
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: notification }
+  template:
+    metadata:
+      labels: { app: notification }
+    spec:
+      containers:
+        - name: notification
+          image: ordermesh:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3004
+          env:
+            - { name: SERVICE, value: notification }
+            - { name: NODE_ENV, value: production }
+            - { name: KAFKA_BROKERS, value: "kafka:19092" }
+            - { name: OTEL_SERVICE_NAME, value: notification }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger:4318" }
+            - { name: OTEL_TRACES_EXPORTER, value: otlp }
+            - { name: OTEL_METRICS_EXPORTER, value: none }
+            - { name: OTEL_LOGS_EXPORTER, value: none }
+            - { name: OTEL_NODE_RESOURCE_DETECTORS, value: none }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: ordermesh-secrets, key: POSTGRES_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: ordermesh-secrets, key: POSTGRES_PASSWORD } }
+            # $(VAR) is expanded by Kubernetes from the variables defined above it.
+            - name: NOTIFICATION_DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/notifications"
+          livenessProbe:
+            httpGet: { path: /health, port: 3004 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /ready, port: 3004 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { cpu: 500m, memory: 384Mi }

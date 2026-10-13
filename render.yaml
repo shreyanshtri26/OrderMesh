@@ -1,0 +1,53 @@
+# Render Blueprint: all four services in one free web service (SERVICE=all).
+# New > Blueprint > pick this repo. Values marked `sync: false` are prompted for
+# at creation; they are never stored in git.
+#
+# Prerequisites (free tiers, no card):
+#   Aiven Kafka   topics orders, inventory, payments, dlq (2 partitions each)
+#   Neon          one database per service (see .env.example)
+services:
+  - type: web
+    name: ordermesh
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE
+        value: all
+      - key: NODE_ENV
+        value: production
+
+      # Kafka (Aiven): service URI host:port, then SASL credentials and the CA certificate.
+      - key: KAFKA_BROKERS
+        sync: false
+      - key: KAFKA_SASL_MECHANISM
+        value: scram-sha-256
+      - key: KAFKA_SASL_USERNAME
+        sync: false
+      - key: KAFKA_SASL_PASSWORD
+        sync: false
+      - key: KAFKA_SSL_CA_PEM
+        sync: false
+
+      # Databases (Neon): pooled connection strings, one per service.
+      - key: ORDER_DATABASE_URL
+        sync: false
+      - key: INVENTORY_DATABASE_URL
+        sync: false
+      - key: PAYMENT_DATABASE_URL
+        sync: false
+      - key: NOTIFICATION_DATABASE_URL
+        sync: false
+
+      # Behaviour. Tracing is off: there is no Jaeger on the free tier.
+      - key: PAYMENT_FAILURE_RATE
+        value: "0.2"
+      - key: OTEL_TRACES_EXPORTER
+        value: none
+      - key: OTEL_METRICS_EXPORTER
+        value: none
+      - key: OTEL_LOGS_EXPORTER
+        value: none
+      - key: OTEL_NODE_RESOURCE_DETECTORS
+        value: none
+      # Leave ADMIN_TOKEN unset to keep /admin/dlq switched off on the public API.
