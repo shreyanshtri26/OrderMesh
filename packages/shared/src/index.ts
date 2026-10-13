@@ -2,6 +2,7 @@ export * from "./catalog.ts";
 export * from "./config.ts";
 export * from "./consumer.ts";
 export * from "./db.ts";
+export * from "./dlq.ts";
 export * from "./events.ts";
 export * from "./http.ts";
 export * from "./kafka.ts";

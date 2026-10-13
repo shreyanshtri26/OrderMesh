@@ -1,0 +1,2062 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OrderMesh · Shop</title>
+    <meta name="description" content="Place an order and watch it move through the OrderMesh saga in real time." />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a0e14'/%3E%3Ccircle cx='9' cy='9' r='3' fill='%23ffb38a'/%3E%3Ccircle cx='23' cy='9' r='3' fill='%23ffb38a'/%3E%3Ccircle cx='16' cy='23' r='3' fill='%23ffb38a'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0a0e14;
+        --bg-soft: #0f141d;
+        --bg-card: #121925;
+        --bg-elev: #19212f;
+        --border: #1e2937;
+        --border-soft: #182230;
+        --text: #e6edf6;
+        --text-dim: #9aa9bd;
+        --text-faint: #8494a8;
+        --peach: #ffb38a;
+        --peach-bright: #ffd3b8;
+        --peach-dim: #4a2a1f;
+        --amber: #fbbf24;
+        --amber-dim: #78350f;
+        --red: #f87171;
+        --red-dim: #7f1d1d;
+        --radius: 14px;
+        --radius-sm: 10px;
+        --maxw: 1120px;
+        --shadow: 0 10px 40px -12px rgba(0, 0, 0, 0.6);
+        --glow-peach: 0 0 0 1px rgba(255, 179, 138, 0.25), 0 8px 30px -8px rgba(255, 179, 138, 0.35);
+        --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+        --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: 84px;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 15px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+
+      /* Soft peach and amber glow behind the page, as on the reference site */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background:
+          radial-gradient(60% 50% at 50% -10%, rgba(255, 179, 138, 0.1), transparent 70%),
+          radial-gradient(40% 40% at 90% 10%, rgba(251, 191, 36, 0.06), transparent 70%);
+        pointer-events: none;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1,
+      h2,
+      h3 {
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+      }
+
+      button,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--peach);
+        outline-offset: 2px;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .container {
+        width: 100%;
+        max-width: var(--maxw);
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      .mono {
+        font-family: var(--mono);
+      }
+
+      .muted {
+        color: var(--text-faint);
+      }
+
+      .small {
+        font-size: 13px;
+      }
+
+      /* ----- Top bar ----- */
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: rgba(10, 14, 20, 0.72);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border-bottom: 1px solid var(--border-soft);
+      }
+
+      .nav-inner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 64px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-weight: 800;
+        font-size: 18px;
+        letter-spacing: -0.02em;
+      }
+
+      .brand .logo {
+        width: 26px;
+        height: 26px;
+        flex: none;
+      }
+
+      .brand .mesh {
+        color: var(--peach);
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: 12px;
+      }
+
+      .nav-links a {
+        padding: 8px 13px;
+        border-radius: 8px;
+        color: var(--text-dim);
+        font-size: 14.5px;
+        font-weight: 500;
+        transition:
+          color 0.15s,
+          background 0.15s;
+      }
+
+      .nav-links a:hover {
+        color: var(--text);
+        background: var(--bg-elev);
+      }
+
+      .cart-btn {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 8px 14px;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: none;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        transition:
+          border-color 0.15s,
+          background 0.15s,
+          transform 0.12s;
+      }
+
+      .cart-btn:hover {
+        border-color: var(--peach);
+        background: var(--bg-elev);
+      }
+
+      .cart-btn:active {
+        transform: translateY(1px);
+      }
+
+      .badge {
+        min-width: 22px;
+        height: 22px;
+        padding: 0 6px;
+        border-radius: 999px;
+        background: var(--peach);
+        color: #3a1608;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 22px;
+        text-align: center;
+        animation: pop 0.35s var(--ease);
+      }
+
+      .badge[hidden] {
+        display: none;
+      }
+
+      .banner {
+        padding: 10px 16px;
+        background: var(--amber-dim);
+        color: var(--amber);
+        font-size: 14px;
+        font-weight: 500;
+        text-align: center;
+      }
+
+      .banner[hidden] {
+        display: none;
+      }
+
+      /* ----- Buttons ----- */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        border: 1px solid transparent;
+        border-radius: 11px;
+        padding: 13px 22px;
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: 600;
+        white-space: nowrap;
+        transition:
+          transform 0.12s,
+          box-shadow 0.2s,
+          background 0.2s,
+          border-color 0.2s,
+          opacity 0.2s;
+      }
+
+      .btn:active:not(:disabled) {
+        transform: translateY(1px);
+      }
+
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, var(--peach) 0%, #f79a72 100%);
+        color: #3a1608;
+        box-shadow: var(--glow-peach);
+      }
+
+      .btn-primary:hover:not(:disabled) {
+        box-shadow:
+          0 0 0 1px rgba(255, 179, 138, 0.4),
+          0 12px 36px -8px rgba(255, 179, 138, 0.5);
+      }
+
+      .btn-sm {
+        height: 34px;
+        padding: 0 16px;
+        font-size: 13.5px;
+        border-radius: 9px;
+      }
+
+      .btn-block {
+        width: 100%;
+        height: 48px;
+      }
+
+      /* ----- Hero ----- */
+      .hero {
+        padding: 72px 0 56px;
+        animation: rise 0.7s var(--ease) both;
+      }
+
+      .kicker {
+        margin-bottom: 22px;
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--text-faint);
+      }
+
+      .kicker .c {
+        color: var(--peach);
+      }
+
+      .hero h1 {
+        max-width: 18ch;
+        font-size: clamp(34px, 4.6vw, 54px);
+        font-weight: 800;
+        line-height: 1.08;
+      }
+
+      .hero h1 em {
+        color: var(--peach);
+        font-style: normal;
+      }
+
+      .lede {
+        max-width: 56ch;
+        margin-top: 20px;
+        color: var(--text-dim);
+        font-size: clamp(15.5px, 1.6vw, 18px);
+      }
+
+      .cta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-top: 32px;
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 22px;
+        margin-top: 30px;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--text-faint);
+      }
+
+      .meta b {
+        color: var(--text-dim);
+        font-weight: 600;
+      }
+
+      /* ----- Sections ----- */
+      .section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 22px;
+      }
+
+      .eyebrow {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--peach);
+      }
+
+      .section-head h2 {
+        margin-top: 8px;
+        font-size: 24px;
+        font-weight: 700;
+      }
+
+      .live {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text-faint);
+      }
+
+      .live::before {
+        content: "";
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        margin-right: 8px;
+        border-radius: 50%;
+        background: var(--peach);
+        animation: pulse 2s infinite;
+      }
+
+      .section {
+        padding: 24px 0 64px;
+      }
+
+      /* ----- Catalog ----- */
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+        gap: 18px;
+      }
+
+      .card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 16px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        transition:
+          transform 0.18s,
+          border-color 0.18s,
+          box-shadow 0.18s;
+        animation: rise 0.55s var(--ease) both;
+        animation-delay: calc(var(--i, 0) * 70ms);
+      }
+
+      /* Peach top line that fades in on hover, as on the reference cards */
+      .card::after {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto;
+        height: 2px;
+        background: linear-gradient(90deg, var(--peach), transparent);
+        opacity: 0;
+        transition: opacity 0.18s;
+      }
+
+      .card:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow);
+      }
+
+      .card:hover::after,
+      .card.in-cart::after {
+        opacity: 1;
+      }
+
+      .thumb {
+        display: grid;
+        place-items: center;
+        aspect-ratio: 4 / 3;
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        background: var(--bg-elev);
+        color: var(--peach);
+        font-family: var(--mono);
+        font-size: 30px;
+        font-weight: 600;
+      }
+
+      .thumb.sm {
+        width: 44px;
+        height: 44px;
+        aspect-ratio: 1;
+        flex: none;
+        font-size: 16px;
+        border-radius: 9px;
+      }
+
+      .card-body {
+        flex: 1;
+        padding: 14px 2px 0;
+      }
+
+      .card-body h3 {
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .sku {
+        margin-top: 4px;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text-faint);
+      }
+
+      .card-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 14px;
+        padding: 0 2px;
+      }
+
+      .price {
+        font-family: var(--mono);
+        font-size: 16px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .qty {
+        display: inline-flex;
+        align-items: center;
+        height: 34px;
+        overflow: hidden;
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+      }
+
+      .qty button {
+        width: 32px;
+        height: 100%;
+        border: 0;
+        background: none;
+        cursor: pointer;
+        font-size: 16px;
+        transition:
+          background 0.15s,
+          color 0.15s;
+      }
+
+      .qty button:hover {
+        background: var(--peach-dim);
+        color: var(--peach-bright);
+      }
+
+      .qty span {
+        min-width: 26px;
+        text-align: center;
+        font-family: var(--mono);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ----- Panels (cart, orders) ----- */
+      .panel {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        gap: 32px;
+        align-items: start;
+        padding-bottom: 8px;
+      }
+
+      .cart {
+        position: sticky;
+        top: 88px;
+        padding-bottom: 20px;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 18px 20px 14px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+
+      .panel-head h2 {
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      .cart-lines {
+        min-height: 110px;
+        margin: 0;
+        padding: 0 20px;
+        list-style: none;
+      }
+
+      .line {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 0;
+        border-top: 1px solid var(--border-soft);
+        animation: rise 0.35s var(--ease) both;
+      }
+
+      .line:first-child {
+        border-top: 0;
+      }
+
+      .line-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .line-name {
+        overflow: hidden;
+        font-size: 14px;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .line-end {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+      }
+
+      .line-total {
+        font-family: var(--mono);
+        font-size: 13.5px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .empty {
+        padding: 28px 0;
+        text-align: center;
+        font-size: 14px;
+        color: var(--text-faint);
+      }
+
+      .field {
+        padding: 0 20px;
+        margin-top: 14px;
+      }
+
+      .field label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-dim);
+      }
+
+      .field input {
+        width: 100%;
+        height: 42px;
+        padding: 0 12px;
+        background: var(--bg-soft);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        font-family: var(--mono);
+        font-size: 13.5px;
+        outline: none;
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s;
+      }
+
+      .field input:focus {
+        border-color: var(--peach);
+        box-shadow: 0 0 0 4px var(--peach-dim);
+      }
+
+      .hint {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--text-faint);
+      }
+
+      .totals {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin: 18px 20px 14px;
+        padding-top: 16px;
+        border-top: 1px dashed var(--border);
+        font-size: 14px;
+        color: var(--text-dim);
+      }
+
+      .totals strong {
+        font-family: var(--mono);
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .cart .btn-block {
+        width: calc(100% - 40px);
+        margin: 0 20px;
+      }
+
+      .fine {
+        margin: 14px 20px 0;
+        font-size: 12px;
+        text-align: center;
+        color: var(--text-faint);
+      }
+
+      /* ----- Orders list ----- */
+      .orders {
+        margin-top: 48px;
+      }
+
+      .order-list {
+        margin: 0;
+        padding: 6px;
+        list-style: none;
+      }
+
+      .order-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 14px;
+        width: 100%;
+        padding: 14px 14px;
+        background: none;
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        text-align: left;
+        cursor: pointer;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+
+      .order-row:hover {
+        background: var(--bg-elev);
+        border-color: var(--border);
+      }
+
+      .order-id {
+        font-family: var(--mono);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--peach-bright);
+      }
+
+      .order-meta {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--text-faint);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .order-list .empty {
+        padding: 26px 14px;
+      }
+
+      /* ----- Status pills (the reference's happy / fail tags) ----- */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 3px 11px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .pill::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      .tone-amber {
+        background: var(--amber-dim);
+        color: var(--amber);
+      }
+
+      .tone-peach {
+        background: var(--peach-dim);
+        color: var(--peach-bright);
+      }
+
+      .tone-red {
+        background: var(--red-dim);
+        color: var(--red);
+      }
+
+      /* ----- Order sheet (native dialog) ----- */
+      .sheet {
+        width: min(560px, calc(100vw - 32px));
+        max-height: 88vh;
+        padding: 0;
+        background: var(--bg-card);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        box-shadow: 0 32px 64px -16px rgba(0, 0, 0, 0.8);
+        overflow: hidden;
+      }
+
+      .sheet[open] {
+        animation: sheetIn 0.35s var(--ease);
+      }
+
+      .sheet::backdrop {
+        background: rgba(5, 8, 12, 0.7);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        animation: fade 0.25s ease;
+      }
+
+      .sheet-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 20px 24px 0;
+      }
+
+      .sheet-head h2 {
+        font-family: var(--mono);
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--peach-bright);
+      }
+
+      .icon-btn {
+        width: 32px;
+        height: 32px;
+        background: none;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 22px;
+        line-height: 1;
+        color: var(--text-faint);
+        transition:
+          background 0.2s,
+          color 0.2s,
+          border-color 0.2s;
+      }
+
+      .icon-btn:hover {
+        background: var(--bg-elev);
+        border-color: var(--border);
+        color: var(--text);
+      }
+
+      .sheet-body {
+        max-height: calc(88vh - 70px);
+        padding: 16px 24px 24px;
+        overflow: auto;
+      }
+
+      .detail-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 18px;
+      }
+
+      .notice {
+        margin-bottom: 16px;
+        padding: 12px 14px;
+        border-radius: var(--radius-sm);
+        background: var(--red-dim);
+        color: var(--red);
+        font-size: 14px;
+      }
+
+      .section-title {
+        margin: 24px 0 12px;
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+      }
+
+      /* ----- Saga tracker: the reference's flow nodes, vertical ----- */
+      .steps {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .step {
+        position: relative;
+        display: flex;
+        gap: 14px;
+        padding-bottom: 20px;
+      }
+
+      .step:not(:last-child)::before {
+        content: "";
+        position: absolute;
+        left: 13px;
+        top: 30px;
+        bottom: 2px;
+        width: 2px;
+        background: var(--border);
+        transition: background 0.6s var(--ease);
+      }
+
+      .step.is-done:not(:last-child)::before {
+        background: var(--peach);
+      }
+
+      .dot {
+        display: grid;
+        place-items: center;
+        flex: none;
+        width: 28px;
+        height: 28px;
+        border: 1.5px solid var(--border);
+        border-radius: 50%;
+        background: var(--bg-soft);
+        color: var(--text-faint);
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 600;
+        transition:
+          background 0.4s var(--ease),
+          border-color 0.4s,
+          color 0.4s;
+      }
+
+      .dot svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      .is-done .dot {
+        background: var(--peach);
+        border-color: var(--peach);
+        color: #3a1608;
+      }
+
+      .is-active .dot {
+        border-color: var(--peach);
+        color: var(--peach);
+        box-shadow: var(--glow-peach);
+        animation: pulse 1.8s infinite;
+      }
+
+      .is-active .dot::after {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--peach);
+      }
+
+      .is-failed .dot {
+        background: var(--red);
+        border-color: var(--red);
+        color: #1a0505;
+      }
+
+      .step-title {
+        margin-top: 3px;
+        font-size: 14.5px;
+        font-weight: 600;
+      }
+
+      .is-active .step-title {
+        color: var(--peach-bright);
+      }
+
+      .is-todo .step-title {
+        color: var(--text-faint);
+      }
+
+      .is-failed .step-title {
+        color: var(--red);
+      }
+
+      .step-hint {
+        margin-top: 2px;
+        font-size: 13px;
+        color: var(--text-dim);
+      }
+
+      .items,
+      .activity {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .items li,
+      .activity li {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border-soft);
+        font-size: 14px;
+      }
+
+      .items li span:last-child,
+      .activity li span:last-child {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .items .total {
+        border-bottom: 0;
+        font-weight: 700;
+      }
+
+      .event {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--peach-bright);
+      }
+
+      /* ----- Footer ----- */
+      footer {
+        padding: 36px 0 40px;
+        background: var(--bg-soft);
+        border-top: 1px solid var(--border);
+      }
+
+      .foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        font-size: 13.5px;
+        color: var(--text-faint);
+      }
+
+      .foot-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .foot-tags span {
+        padding: 5px 12px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text-dim);
+      }
+
+      .foot a {
+        color: var(--text-dim);
+        transition: color 0.15s;
+      }
+
+      .foot a:hover {
+        color: var(--peach);
+      }
+
+      /* ----- Toasts and skeletons ----- */
+      .toasts {
+        position: fixed;
+        left: 50%;
+        bottom: 24px;
+        transform: translateX(-50%);
+        z-index: 60;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        pointer-events: none;
+      }
+
+      .toast {
+        padding: 12px 18px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--bg-elev);
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 500;
+        box-shadow: var(--shadow);
+        animation: toastIn 0.35s var(--ease);
+        transition:
+          opacity 0.3s,
+          transform 0.3s;
+      }
+
+      .toast.error {
+        border-color: var(--red);
+        color: var(--red);
+      }
+
+      .toast.warn {
+        border-color: var(--amber);
+        color: var(--amber);
+      }
+
+      .toast.out {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      .skeleton {
+        border-radius: var(--radius);
+        background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-elev) 50%, var(--bg-card) 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.4s infinite linear;
+      }
+
+      .skeleton-card {
+        height: 260px;
+      }
+
+      .skeleton.tall {
+        height: 260px;
+      }
+
+      /* ----- Motion ----- */
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes sheetIn {
+        from {
+          opacity: 0;
+          transform: translateY(16px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes fade {
+        from {
+          opacity: 0;
+        }
+      }
+
+      @keyframes pop {
+        from {
+          transform: scale(0.6);
+        }
+        to {
+          transform: none;
+        }
+      }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(255, 179, 138, 0.4);
+        }
+        70% {
+          box-shadow: 0 0 0 8px rgba(255, 179, 138, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(255, 179, 138, 0);
+        }
+      }
+
+      @keyframes shimmer {
+        from {
+          background-position: 200% 0;
+        }
+        to {
+          background-position: -200% 0;
+        }
+      }
+
+      @keyframes toastIn {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* ----- Responsive ----- */
+      .mbar {
+        display: none;
+      }
+
+      @media (max-width: 900px) {
+        .mbar {
+          position: fixed;
+          left: 16px;
+          right: 16px;
+          bottom: 16px;
+          z-index: 40;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 14px 18px;
+          background: rgba(18, 25, 37, 0.92);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid var(--peach);
+          border-radius: var(--radius);
+          box-shadow: var(--shadow), var(--glow-peach);
+          color: var(--text);
+          font-weight: 600;
+          cursor: pointer;
+          animation: rise 0.35s var(--ease);
+        }
+
+        .mbar[hidden] {
+          display: none;
+        }
+
+        .mbar-text {
+          font-family: var(--mono);
+          font-size: 13.5px;
+        }
+
+        .mbar-go {
+          color: var(--peach-bright);
+        }
+
+        .toasts {
+          bottom: 92px;
+        }
+
+        body {
+          padding-bottom: 84px;
+        }
+
+        .layout {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 24px;
+        }
+
+        .cart {
+          position: static;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .container {
+          padding: 0 18px;
+        }
+
+        .nav-links {
+          display: none;
+        }
+
+        .hero {
+          padding: 48px 0 40px;
+        }
+
+        .cta .btn {
+          flex: 1 1 100%;
+        }
+
+        .meta {
+          gap: 16px;
+        }
+
+        .grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .card {
+          padding: 12px;
+        }
+
+        .card-body h3 {
+          font-size: 14.5px;
+        }
+
+        .order-row {
+          grid-template-columns: 1fr auto;
+        }
+
+        .order-meta {
+          grid-column: 1 / -1;
+          grid-row: 2;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="nav">
+      <div class="container nav-inner">
+        <a class="brand" href="/">
+          <svg class="logo" viewBox="0 0 26 26" aria-hidden="true">
+            <rect width="26" height="26" rx="7" fill="#0f141d" stroke="#1e2937" />
+            <circle cx="8" cy="8" r="2.6" fill="#ffb38a" />
+            <circle cx="18" cy="8" r="2.6" fill="#ffb38a" />
+            <circle cx="13" cy="18" r="2.6" fill="#fbbf24" />
+            <path
+              d="M10 9.5l2 6.2M16 9.5l-2 6.2"
+              stroke="#ffb38a"
+              stroke-width="1.4"
+              stroke-linecap="round"
+              opacity="0.7"
+            />
+          </svg>
+          <span>Order<span class="mesh">Mesh</span></span>
+        </a>
+        <nav class="nav-links" aria-label="Primary">
+          <a href="#shop">Shop</a>
+          <a href="#orders">Orders</a>
+        </nav>
+        <button class="cart-btn" id="cart-jump" type="button" aria-label="Go to cart">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M6 7h12l-1 13H7L6 7z" />
+            <path d="M9 7V5a3 3 0 0 1 6 0v2" />
+          </svg>
+          Cart
+          <span class="badge" id="cart-count" hidden>0</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="banner" id="banner" hidden>We can't reach the order service right now. Retrying…</div>
+
+    <main class="container">
+      <section class="hero">
+        <p class="kicker"><span class="c">$</span> order-service --place-order</p>
+        <h1>Pantry essentials, <em>fulfilled asynchronously</em></h1>
+        <p class="lede">
+          Every order moves through a saga across Order, Inventory and Payment. Each step is an event on Kafka, and you
+          can watch it advance in real time.
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary" href="#shop">Start shopping</a>
+          <a class="btn" href="#orders" style="border-color: var(--border); background: transparent">Track an order</a>
+        </div>
+        <div class="meta">
+          <span>services <b>4</b></span>
+          <span>bus <b>Kafka</b></span>
+          <span>state <b>saga, DB per service</b></span>
+        </div>
+      </section>
+
+      <div class="layout">
+        <section id="shop" aria-label="Products">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Catalog</span>
+              <h2>Shop</h2>
+            </div>
+          </div>
+          <div class="grid" id="grid">
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+          </div>
+
+          <section class="panel orders" id="orders" aria-labelledby="orders-title">
+            <div class="panel-head">
+              <h2 id="orders-title">Recent orders</h2>
+              <span class="live">live</span>
+            </div>
+            <ul class="order-list" id="order-list">
+              <li class="empty">Loading orders…</li>
+            </ul>
+          </section>
+        </section>
+
+        <aside class="cart panel" id="cart" aria-labelledby="cart-title">
+          <div class="panel-head">
+            <h2 id="cart-title">Your cart</h2>
+            <span class="eyebrow" style="font-size: 11px">Basket</span>
+          </div>
+          <ul class="cart-lines" id="cart-lines"></ul>
+
+          <div class="field">
+            <label for="customer">Customer ID</label>
+            <input id="customer" maxlength="64" autocomplete="off" spellcheck="false" />
+            <p class="hint">Used to group your orders.</p>
+          </div>
+
+          <div class="totals">
+            <span>Total</span>
+            <strong id="cart-total">₹0</strong>
+          </div>
+          <button class="btn btn-primary btn-block" id="place" type="button" disabled>Place order</button>
+          <p class="fine">Orders are accepted instantly and confirmed once stock and payment succeed.</p>
+        </aside>
+      </div>
+    </main>
+
+    <footer>
+      <div class="container foot">
+        <div class="foot-tags">
+          <span>Kafka</span>
+          <span>Postgres</span>
+          <span>Outbox</span>
+          <span>Saga</span>
+          <span>Fastify</span>
+        </div>
+        <a href="https://github.com/shreyanshtri26/OrderMesh">Source on GitHub</a>
+      </div>
+    </footer>
+
+    <dialog class="sheet" id="order-dialog" aria-labelledby="order-title">
+      <div class="sheet-head">
+        <h2 id="order-title">Order</h2>
+        <button class="icon-btn" id="close-dialog" type="button" aria-label="Close">×</button>
+      </div>
+      <div class="sheet-body" id="order-body"></div>
+    </dialog>
+
+    <button class="mbar" id="mbar" type="button" hidden aria-label="View cart">
+      <span class="mbar-text" id="mbar-text"></span>
+      <span class="mbar-go">View cart →</span>
+    </button>
+
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+
+    <script>
+      const MAX_QTY = 20;
+      const MAX_LINES = 10;
+      const TERMINAL = new Set(["CONFIRMED", "CANCELLED"]);
+      const CHECK =
+        '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"/></svg>';
+      const CROSS =
+        '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+      // Paise (1/100 rupee) in, rupees out. Keep in sync with the server's catalog.
+      const moneyFmt = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 });
+      const money = (paise) => moneyFmt.format(paise / 100);
+      const when = (iso) =>
+        new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      const shortId = (id) => id.slice(0, 8).toUpperCase();
+      const humanize = (event) => event.replace(/([a-z])([A-Z])/g, "$1 $2");
+      const esc = (value) =>
+        String(value).replace(
+          /[&<>"']/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+        );
+      const $ = (selector) => document.querySelector(selector);
+
+      const STATUS = {
+        PENDING: ["Pending", "amber"],
+        INVENTORY_RESERVED: ["Awaiting payment", "peach"],
+        CONFIRMED: ["Confirmed", "peach"],
+        CANCELLING: ["Cancelling", "amber"],
+        CANCELLED: ["Cancelled", "red"],
+      };
+      const pill = (status) => {
+        const [label, tone] = STATUS[status] ?? [status, "amber"];
+        return `<span class="pill tone-${tone}">${esc(label)}</span>`;
+      };
+
+      // The saga, from the customer's side. Payment is the step that stays in progress
+      // until the Payment service is built.
+      const FLOW = [
+        { key: "PENDING", label: "Order placed", hint: "Accepted by the Order service" },
+        { key: "INVENTORY_RESERVED", label: "Stock reserved", hint: "Inventory is holding your items" },
+        { key: "CONFIRMED", label: "Payment confirmed", hint: "Payment captured, order confirmed" },
+      ];
+
+      function stepsFor(order) {
+        const reached = new Set(["PENDING", order.status, ...order.history.map((h) => h.to)]);
+        const cancelled = order.status === "CANCELLING" || order.status === "CANCELLED";
+        const steps = (cancelled ? FLOW.slice(0, 2) : FLOW).map((s) => ({
+          label: s.label,
+          hint: s.hint,
+          state: reached.has(s.key) ? "done" : "todo",
+        }));
+        if (cancelled) {
+          const done = order.status === "CANCELLED";
+          steps.push({
+            label: done ? "Cancelled" : "Releasing stock",
+            hint: order.cancelReason ?? (done ? "Order cancelled" : "Payment failed, undoing the reservation"),
+            state: done ? "failed" : "active",
+          });
+        } else {
+          const next = steps.find((s) => s.state === "todo");
+          if (next) next.state = "active";
+        }
+        return steps;
+      }
+
+      const store = {
+        get(key, fallback) {
+          try {
+            return JSON.parse(localStorage.getItem(key)) ?? fallback;
+          } catch {
+            return fallback;
+          }
+        },
+        set(key, value) {
+          try {
+            localStorage.setItem(key, JSON.stringify(value));
+          } catch {
+            // Private mode or blocked storage: the cart just will not persist.
+          }
+        },
+      };
+
+      const state = {
+        catalog: null,
+        cart: store.get("ordermesh.cart", {}),
+        orders: [],
+        submitting: false,
+        pendingKey: null,
+        activeOrderId: null,
+        detailSig: null,
+        ordersSig: null,
+        timer: null,
+        openedAt: 0,
+        demo: false,
+      };
+
+      async function api(path, init = {}) {
+        if (state.demo) return demoApi(path, init);
+        let res;
+        try {
+          res = await fetch(path, { ...init, headers: { "Content-Type": "application/json", ...init.headers } });
+        } catch (cause) {
+          throw Object.assign(new Error("Network error"), { cause });
+        }
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const message = body.issues?.[0]?.message ?? body.error ?? `Request failed (${res.status})`;
+          throw Object.assign(new Error(message), { status: res.status });
+        }
+        return body;
+      }
+
+      function toast(message, tone = "") {
+        const el = document.createElement("div");
+        el.className = `toast ${tone}`.trim();
+        el.textContent = message;
+        $("#toasts").append(el);
+        setTimeout(() => el.classList.add("out"), 2800);
+        setTimeout(() => el.remove(), 3150);
+      }
+
+      function setBanner(show, text) {
+        const banner = $("#banner");
+        if (text) banner.textContent = text;
+        banner.hidden = !show;
+      }
+
+      // ----- Sample data mode -----
+      // Used only when the order API cannot be reached (for example the static
+      // copy on Vercel, which has no backend). Everything below is labelled as
+      // sample data in the UI, and orders are simulated in this browser tab.
+      // The catalog mirrors packages/shared/src/catalog.ts; the saga rules mirror
+      // services/order/src/saga.ts, Inventory and Payment.
+
+      const DEMO_CATALOG = {
+        "SKU-TEA-250": { name: "Assam tea, 250 g", unitPricePaise: 24900, initialStock: 50 },
+        "SKU-RICE-5KG": { name: "Basmati rice, 5 kg", unitPricePaise: 69900, initialStock: 20 },
+        "SKU-GHEE-1L": { name: "Desi ghee, 1 L", unitPricePaise: 64900, initialStock: 10 },
+        "SKU-SAFFRON-1G": { name: "Kashmiri saffron, 1 g", unitPricePaise: 39900, initialStock: 1 },
+      };
+      const DEMO_DECLINE_RATE = 0.2;
+      const demoStock = Object.fromEntries(Object.entries(DEMO_CATALOG).map(([sku, p]) => [sku, p.initialStock]));
+      const demoKeys = new Map();
+      let demoOrders = [];
+
+      const demoLine = (sku, quantity) => ({ sku, quantity, unitPricePaise: DEMO_CATALOG[sku].unitPricePaise });
+      const demoTotal = (items) => items.reduce((n, i) => n + i.unitPricePaise * i.quantity, 0);
+
+      function demoSeedOrders() {
+        const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
+        const make = (customerId, items, status, cancelReason, minutes, events) => {
+          const lines = items.map(([sku, qty]) => demoLine(sku, qty));
+          let from = "PENDING";
+          const history = events.map(([to, event], i) => {
+            const row = { from, to, event, at: ago(minutes - (i + 1) * 0.1) };
+            from = to;
+            return row;
+          });
+          return {
+            id: crypto.randomUUID(),
+            customerId,
+            status,
+            items: lines,
+            totalPaise: demoTotal(lines),
+            cancelReason,
+            createdAt: ago(minutes),
+            updatedAt: ago(minutes - 0.4),
+            history,
+          };
+        };
+        return [
+          make(
+            "sample-asha",
+            [
+              ["SKU-TEA-250", 2],
+              ["SKU-GHEE-1L", 1],
+            ],
+            "CONFIRMED",
+            null,
+            6,
+            [
+              ["INVENTORY_RESERVED", "InventoryReserved"],
+              ["CONFIRMED", "PaymentCompleted"],
+            ],
+          ),
+          make("sample-ravi", [["SKU-SAFFRON-1G", 2]], "CANCELLED", "out_of_stock:SKU-SAFFRON-1G", 14, [
+            ["CANCELLED", "InventoryRejected"],
+          ]),
+          make("sample-meera", [["SKU-RICE-5KG", 1]], "CANCELLED", "card_declined", 31, [
+            ["INVENTORY_RESERVED", "InventoryReserved"],
+            ["CANCELLING", "PaymentFailed"],
+            ["CANCELLED", "InventoryReleased"],
+          ]),
+        ];
+      }
+
+      function demoSaga(order) {
+        const move = (to, event, cancelReason) => {
+          const at = new Date().toISOString();
+          order.history.push({ from: order.status, to, event, at });
+          order.status = to;
+          order.updatedAt = at;
+          if (cancelReason) order.cancelReason = cancelReason;
+        };
+        const need = new Map();
+        for (const i of order.items) need.set(i.sku, (need.get(i.sku) ?? 0) + i.quantity);
+        const short = [...need].find(([sku, qty]) => demoStock[sku] < qty);
+
+        setTimeout(() => {
+          if (short) return move("CANCELLED", "InventoryRejected", `out_of_stock:${short[0]}`);
+          for (const [sku, qty] of need) demoStock[sku] -= qty;
+          move("INVENTORY_RESERVED", "InventoryReserved");
+          setTimeout(() => {
+            if (Math.random() >= DEMO_DECLINE_RATE) return move("CONFIRMED", "PaymentCompleted");
+            move("CANCELLING", "PaymentFailed");
+            setTimeout(() => {
+              for (const [sku, qty] of need) demoStock[sku] += qty;
+              move("CANCELLED", "InventoryReleased", "card_declined");
+            }, 900);
+          }, 1400);
+        }, 700);
+      }
+
+      async function demoApi(path, init) {
+        await new Promise((resolve) => setTimeout(resolve, 120)); // feels like a request, not a function call
+        if (path === "/catalog") return DEMO_CATALOG;
+        if (path === "/orders" && init.method === "POST") {
+          const key = init.headers?.["Idempotency-Key"];
+          if (key && demoKeys.has(key)) return demoKeys.get(key);
+          const body = JSON.parse(init.body);
+          const items = body.items ?? [];
+          const bad = items.find((i) => !DEMO_CATALOG[i.sku] || !(i.quantity >= 1 && i.quantity <= MAX_QTY));
+          if (!body.customerId || !items.length || items.length > MAX_LINES || bad) {
+            throw Object.assign(new Error("Invalid order"), { status: 400 });
+          }
+          const lines = items.map((i) => demoLine(i.sku, i.quantity));
+          const now = new Date().toISOString();
+          const order = {
+            id: crypto.randomUUID(),
+            customerId: body.customerId,
+            status: "PENDING",
+            items: lines,
+            totalPaise: demoTotal(lines),
+            cancelReason: null,
+            createdAt: now,
+            updatedAt: now,
+            history: [],
+          };
+          demoOrders = [order, ...demoOrders];
+          if (key) demoKeys.set(key, order);
+          demoSaga(order);
+          return order;
+        }
+        if (path === "/orders") return demoOrders.slice(0, 20);
+        const order = demoOrders.find((o) => path === `/orders/${o.id}`);
+        if (!order) throw Object.assign(new Error("not_found"), { status: 404 });
+        return order;
+      }
+
+      function enterDemo() {
+        state.demo = true;
+        state.catalog = DEMO_CATALOG;
+        demoOrders = demoSeedOrders();
+        setBanner(
+          true,
+          "Sample data: the order API isn't connected to this site, so orders you place are simulated in your browser.",
+        );
+        $(".live").textContent = "sample data";
+        renderCatalog();
+        renderCart();
+        loadOrders();
+        // If the API comes back (for example the local stack finishes starting), switch to live data.
+        setInterval(
+          () =>
+            fetch("/catalog")
+              .then((res) => res.ok && res.headers.get("content-type")?.includes("json") && location.reload())
+              .catch(() => {}),
+          15000,
+        );
+      }
+
+      // ----- Catalog -----
+
+      // A small glyph per product, falling back to the name's first letter for an unknown SKU.
+      const GLYPHS = { "SKU-TEA-250": "🍵", "SKU-RICE-5KG": "🍚", "SKU-GHEE-1L": "🧈", "SKU-SAFFRON-1G": "🌸" };
+      const glyph = (sku, name) => esc(GLYPHS[sku] ?? name.charAt(0));
+
+      const stepperHtml = (qty) => `
+        <div class="qty" role="group" aria-label="Quantity">
+          <button type="button" data-act="dec" aria-label="Remove one">−</button>
+          <span aria-live="polite">${qty}</span>
+          <button type="button" data-act="inc" aria-label="Add one">+</button>
+        </div>`;
+
+      let catalogFailures = 0;
+      async function loadCatalog() {
+        try {
+          state.catalog = await api("/catalog");
+          setBanner(false);
+          renderCatalog();
+          renderCart();
+        } catch {
+          // Two quick failures in a row means there is no API behind this page.
+          if (++catalogFailures >= 2) return enterDemo();
+          setBanner(true, "We can't reach the order service right now. Retrying…");
+          setTimeout(loadCatalog, 1500);
+        }
+      }
+
+      function renderCatalog() {
+        $("#grid").innerHTML = Object.entries(state.catalog)
+          .map(
+            ([sku, p], i) => `
+          <article class="card" style="--i:${i}" data-sku="${esc(sku)}">
+            <div class="thumb" aria-hidden="true">${glyph(sku, p.name)}</div>
+            <div class="card-body">
+              <h3>${esc(p.name)}</h3>
+              <p class="sku">${esc(sku)}</p>
+            </div>
+            <div class="card-foot">
+              <span class="price">${money(p.unitPricePaise)}</span>
+              <div class="ctl"></div>
+            </div>
+          </article>`,
+          )
+          .join("");
+        refreshControls();
+      }
+
+      function refreshControls() {
+        document.querySelectorAll("#grid .card").forEach((card) => {
+          const qty = state.cart[card.dataset.sku] ?? 0;
+          card.querySelector(".ctl").innerHTML = qty
+            ? stepperHtml(qty)
+            : `<button class="btn btn-primary btn-sm" type="button" data-act="inc">Add</button>`;
+          card.classList.toggle("in-cart", qty > 0);
+        });
+      }
+
+      // ----- Cart -----
+
+      function cartLines() {
+        if (!state.catalog) return [];
+        return Object.entries(state.cart)
+          .filter(([sku]) => state.catalog[sku])
+          .map(([sku, qty]) => {
+            const p = state.catalog[sku];
+            return { sku, qty, name: p.name, unit: p.unitPricePaise, lineTotal: p.unitPricePaise * qty };
+          });
+      }
+
+      function changeQty(sku, qty) {
+        if (state.submitting) return;
+        const current = state.cart[sku] ?? 0;
+        if (qty > MAX_QTY) return toast(`Up to ${MAX_QTY} of each item per order.`, "warn");
+        if (qty > 0 && !current && Object.keys(state.cart).length >= MAX_LINES) {
+          return toast(`An order can hold up to ${MAX_LINES} different items.`, "warn");
+        }
+        if (qty > 0) state.cart[sku] = qty;
+        else delete state.cart[sku];
+        state.pendingKey = null; // the cart changed, so the next order needs a fresh idempotency key
+        store.set("ordermesh.cart", state.cart);
+        refreshControls();
+        renderCart();
+      }
+
+      function renderCart() {
+        const lines = cartLines();
+        const units = lines.reduce((n, l) => n + l.qty, 0);
+        const total = lines.reduce((n, l) => n + l.lineTotal, 0);
+        const badge = $("#cart-count");
+        badge.textContent = units;
+        badge.hidden = units === 0;
+        $("#mbar").hidden = units === 0;
+        $("#mbar-text").textContent = `${units} item${units === 1 ? "" : "s"} · ${money(total)}`;
+
+        $("#cart-lines").innerHTML = lines.length
+          ? lines
+              .map(
+                (l) => `
+            <li class="line" data-sku="${esc(l.sku)}">
+              <div class="thumb sm" aria-hidden="true">${glyph(l.sku, l.name)}</div>
+              <div class="line-info">
+                <p class="line-name">${esc(l.name)}</p>
+                <p class="muted small mono">${money(l.unit)} each</p>
+              </div>
+              <div class="line-end">
+                <span class="line-total">${money(l.lineTotal)}</span>
+                ${stepperHtml(l.qty)}
+              </div>
+            </li>`,
+              )
+              .join("")
+          : `<li class="empty">Your cart is empty. Add something from the shop.</li>`;
+
+        $("#cart-total").textContent = money(total);
+        const place = $("#place");
+        place.disabled = !lines.length || state.submitting;
+        place.textContent = state.submitting
+          ? "Placing order…"
+          : lines.length
+            ? `Place order · ${money(total)}`
+            : "Place order";
+      }
+
+      async function placeOrder() {
+        const customerId = $("#customer").value.trim();
+        const items = cartLines().map(({ sku, qty }) => ({ sku, quantity: qty }));
+        if (!customerId) {
+          toast("Enter a customer ID to place the order.", "warn");
+          $("#customer").focus();
+          return;
+        }
+        if (!items.length || state.submitting) return;
+
+        state.submitting = true;
+        state.pendingKey ??= crypto.randomUUID();
+        renderCart();
+        try {
+          const order = await api("/orders", {
+            method: "POST",
+            headers: { "Idempotency-Key": state.pendingKey },
+            body: JSON.stringify({ customerId, items }),
+          });
+          state.pendingKey = null;
+          state.cart = {};
+          store.set("ordermesh.cart", state.cart);
+          refreshControls();
+          upsertOrder(order);
+          toast("Order placed. Tracking it live.");
+          openOrder(order.id);
+        } catch (error) {
+          // A 4xx means the request itself was refused, so a retry needs a fresh key.
+          // A network error or 5xx keeps the key, so retrying cannot create a second order.
+          if (error.status >= 400 && error.status < 500) state.pendingKey = null;
+          toast(error.message, "error");
+        } finally {
+          state.submitting = false;
+          renderCart();
+        }
+      }
+
+      // ----- Orders -----
+
+      function upsertOrder(order) {
+        state.orders = [order, ...state.orders.filter((o) => o.id !== order.id)];
+        renderOrders();
+      }
+
+      async function loadOrders() {
+        try {
+          state.orders = await api("/orders");
+          renderOrders();
+        } catch {
+          // Keep the last list on screen; the banner covers outages.
+        }
+      }
+
+      function renderOrders() {
+        const html = state.orders.length
+          ? state.orders
+              .map((o) => {
+                const units = o.items.reduce((n, i) => n + i.quantity, 0);
+                return `
+            <li>
+              <button class="order-row" type="button" data-act="open" data-id="${esc(o.id)}">
+                <span class="order-id">#${shortId(o.id)}</span>
+                <span class="order-meta">${units} item${units === 1 ? "" : "s"} · ${money(o.totalPaise)} · ${esc(when(o.createdAt))}</span>
+                ${pill(o.status)}
+              </button>
+            </li>`;
+              })
+              .join("")
+          : `<li class="empty">No orders yet. Your placed orders will show up here.</li>`;
+
+        // Skip the DOM write when nothing changed, so hover states and focus survive the 5-second refresh.
+        if (html === state.ordersSig) return;
+        state.ordersSig = html;
+        $("#order-list").innerHTML = html;
+      }
+
+      // ----- Order sheet with live saga progress -----
+
+      function openOrder(id) {
+        state.activeOrderId = id;
+        state.detailSig = null;
+        state.openedAt = Date.now();
+        const dialog = $("#order-dialog");
+        if (!dialog.open) {
+          $("#order-body").innerHTML = `<div class="skeleton tall"></div>`;
+          dialog.showModal();
+        }
+        refreshOrder();
+      }
+
+      async function refreshOrder() {
+        const id = state.activeOrderId;
+        if (!id) return;
+        clearTimeout(state.timer);
+        try {
+          const order = await api(`/orders/${id}`);
+          if (id !== state.activeOrderId) return; // closed or switched while loading
+          upsertOrder(order);
+          renderOrderDetail(order);
+          // Poll quickly right after opening so each saga step is seen, then back off.
+          const delay = Date.now() - state.openedAt < 8_000 ? 400 : 1500;
+          if (!TERMINAL.has(order.status)) state.timer = setTimeout(refreshOrder, delay);
+        } catch {
+          if (id === state.activeOrderId) state.timer = setTimeout(refreshOrder, 3000);
+        }
+      }
+
+      function renderOrderDetail(order) {
+        const sig = JSON.stringify(order);
+        if (sig === state.detailSig) return; // nothing changed since the last poll
+        state.detailSig = sig;
+
+        $("#order-title").textContent = `Order #${shortId(order.id)}`;
+        const steps = stepsFor(order)
+          .map(
+            (s, i) => `
+          <li class="step is-${s.state}">
+            <span class="dot">${s.state === "done" ? CHECK : s.state === "failed" ? CROSS : i + 1}</span>
+            <div>
+              <p class="step-title">${esc(s.label)}</p>
+              <p class="step-hint">${esc(s.hint)}</p>
+            </div>
+          </li>`,
+          )
+          .join("");
+        const items = order.items
+          .map((i) => {
+            const name = state.catalog?.[i.sku]?.name ?? i.sku;
+            return `<li><span>${esc(name)} × ${i.quantity}</span><span>${money(i.unitPricePaise * i.quantity)}</span></li>`;
+          })
+          .join("");
+        const activity =
+          order.history
+            .map(
+              (h) => `
+          <li><span class="event">${esc(humanize(h.event))}</span><span class="muted small">${esc(when(h.at))}</span></li>`,
+            )
+            .join("") || `<li class="muted small">Waiting for the first event…</li>`;
+
+        // Remember each step's previous state so a change can animate instead of snapping.
+        const body = $("#order-body");
+        const previous =
+          body.dataset.orderId === order.id ? [...body.querySelectorAll(".step")].map((li) => li.className) : [];
+
+        body.innerHTML = `
+          <div class="detail-head">
+            ${pill(order.status)}
+            <span class="muted small mono">${esc(when(order.createdAt))}</span>
+          </div>
+          ${order.cancelReason ? `<p class="notice">${esc(order.cancelReason)}</p>` : ""}
+          <ol class="steps">${steps}</ol>
+          <h3 class="section-title">Items</h3>
+          <ul class="items">${items}<li class="total"><span>Total</span><span>${money(order.totalPaise)}</span></li></ul>
+          <h3 class="section-title">Activity</h3>
+          <ul class="activity">${activity}</ul>`;
+
+        body.dataset.orderId = order.id;
+        const lis = [...body.querySelectorAll(".step")];
+        if (previous.length === lis.length) {
+          lis.forEach((li, i) => {
+            const target = li.className;
+            if (previous[i] === target) return;
+            li.className = previous[i];
+            // Reading layout flushes styles, so the old state is applied before the new one
+            // and the CSS transition runs. Synchronous on purpose: animation frames are
+            // paused in a hidden tab, which would leave the tracker stale.
+            void li.offsetWidth;
+            li.className = target;
+          });
+        }
+      }
+
+      // ----- Wiring -----
+
+      document.addEventListener("click", (event) => {
+        const control = event.target.closest("[data-act]");
+        if (!control) return;
+        const act = control.dataset.act;
+        if (act === "open") return openOrder(control.dataset.id);
+
+        const sku = control.closest("[data-sku]")?.dataset.sku;
+        if (!sku) return;
+        const qty = state.cart[sku] ?? 0;
+        if (act === "inc") changeQty(sku, qty + 1);
+        if (act === "dec") changeQty(sku, qty - 1);
+      });
+
+      $("#place").addEventListener("click", placeOrder);
+      $("#close-dialog").addEventListener("click", () => $("#order-dialog").close());
+      $("#order-dialog").addEventListener("click", (event) => {
+        if (event.target === event.currentTarget) event.currentTarget.close(); // click on the backdrop
+      });
+      $("#order-dialog").addEventListener("close", () => {
+        state.activeOrderId = null;
+        clearTimeout(state.timer);
+      });
+      const showCart = () => $("#cart").scrollIntoView({ behavior: "smooth", block: "start" });
+      $("#cart-jump").addEventListener("click", showCart);
+      $("#mbar").addEventListener("click", showCart);
+
+      const customerInput = $("#customer");
+      customerInput.value = store.get("ordermesh.customer", "") || `cust-${Math.random().toString(36).slice(2, 8)}`;
+      store.set("ordermesh.customer", customerInput.value);
+      customerInput.addEventListener("input", () => {
+        state.pendingKey = null;
+        store.set("ordermesh.customer", customerInput.value);
+      });
+
+      renderCart();
+      loadCatalog();
+      loadOrders();
+      setInterval(() => document.visibilityState === "visible" && loadOrders(), 5000);
+    </script>
+  </body>
+</html>

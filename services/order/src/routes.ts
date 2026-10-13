@@ -1,10 +1,17 @@
+import { timingSafeEqual } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   appendToOutbox,
   CATALOG,
   createEvent,
+  createKafka,
+  createProducer,
   isSku,
+  readDlq,
+  replayFromDlq,
   withTransaction,
   z,
+  type Producer,
   type ServiceContext,
 } from "@ordermesh/shared";
 
@@ -29,7 +36,46 @@ type OrderRow = {
   updated_at: string;
 };
 
-export function registerRoutes({ app, pool }: ServiceContext) {
+// The storefront is one static page; read once at startup, no build step.
+const STOREFRONT = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+
+const replayBody = z.object({ partition: z.number().int().min(0), offset: z.number().int().min(0) });
+
+function tokenMatches(header: string | undefined, token: string): boolean {
+  const given = Buffer.from(header ?? "");
+  const wanted = Buffer.from(`Bearer ${token}`);
+  return given.length === wanted.length && timingSafeEqual(given, wanted);
+}
+
+export function registerRoutes({ app, pool, config }: ServiceContext) {
+  app.get("/", async (_request, reply) => reply.type("text/html; charset=utf-8").send(STOREFRONT));
+
+  // Dead-letter queue operations. Off unless ADMIN_TOKEN is set, because they
+  // expose message bodies and can re-run events.
+  const adminToken = process.env.ADMIN_TOKEN;
+  if (adminToken) {
+    const kafka = createKafka(config);
+    let producer: Producer | undefined;
+
+    app.get("/admin/dlq", async (request, reply) => {
+      if (!tokenMatches(request.headers.authorization, adminToken))
+        return reply.code(401).send({ error: "unauthorized" });
+      const entries = await readDlq(kafka);
+      return { count: entries.length, entries };
+    });
+
+    app.post("/admin/dlq/replay", async (request, reply) => {
+      if (!tokenMatches(request.headers.authorization, adminToken))
+        return reply.code(401).send({ error: "unauthorized" });
+      const parsed = replayBody.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ error: "invalid_request", issues: parsed.error.issues });
+
+      producer ??= await createProducer(kafka);
+      const entry = await replayFromDlq(kafka, producer, parsed.data);
+      if (!entry) return reply.code(404).send({ error: "not_found_or_not_replayable" });
+      return { replayed: true, topic: entry.originalTopic, key: entry.key };
+    });
+  }
   app.get("/catalog", async () => CATALOG);
 
   /**
